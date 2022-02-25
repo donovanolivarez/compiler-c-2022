@@ -8,6 +8,11 @@
 // can either define or use Enum. Enum may be cleaner.
 #define START_STATE = 0;
 
+int isKeyword(char* token);
+int isOperator(char c);
+int isSpecialOperator(char c);
+
+
 enum State { 
     Rejected = -1,
     Start = 0,
@@ -17,7 +22,8 @@ enum State {
     DoubleConstant = 4,
     StringConstant = 5,
     Operator = 6,
-    Complete = 7
+    SpecialOperator = 7,
+    Complete = 8
 };
 // constants for checking reserved words and boolean constants
 const char keywords[32][12] = {
@@ -30,15 +36,24 @@ const char *bValues[] = {
     "true", "false"
 };
 
+const char quotation = '"';
+
+const char operators[20] = { '+', '-', '*', '/', '%', '<', '>', '=', '!', '&', '|', ';', ',', '.', '(', ')', '{', '}' };
+
+const char specialOperators[10] = {'<', '=', '>', '!', '&', '|'};
+
+const char specialOperatorTokens[10][10] = {"<=", ">=", "==", "!=", "&&", "||" };
+
 // anything greater than 0 is an accepted state
 // first index is the current state bit
 // state table - defines out finite automata
-const enum State stateTable[7][7] = {
-    {Start, Identifer, Identifer, IntConstant, IntConstant, StringConstant, Operator },
-    {Identifer, Identifer, Identifer, Identifer, Identifer, Complete, Complete },
-    {BoolConstant, Identifer, Identifer, Identifer, Identifer, Identifer, Identifer },
-    {IntConstant, Complete, Complete, IntConstant, DoubleConstant, Complete, Complete},
-    {DoubleConstant, Complete, Complete, Complete, DoubleConstant, Complete, Complete},
-    {StringConstant, StringConstant, StringConstant, StringConstant},
-    // {Operator, }
+const enum State stateTable[8][8] = {
+    {Start,             Identifer, Identifer, IntConstant, IntConstant, StringConstant, Operator, SpecialOperator },
+    {Identifer,         Identifer, Identifer, Identifer, Identifer, Identifer, Complete, Complete },
+    {BoolConstant,      Identifer, Identifer, Identifer, Identifer, Identifer, Identifer , Identifer}, // unnecessary row, maybe can delete later
+    {IntConstant,       Complete, Complete, IntConstant, DoubleConstant, Complete, Complete, Complete},
+    {DoubleConstant,    Complete, Complete, Complete, DoubleConstant, Complete, Complete, Complete},
+    {StringConstant,    StringConstant, StringConstant, StringConstant, StringConstant, StringConstant, StringConstant, Complete},
+    {Operator,          Complete, Complete, Complete, Complete, Complete, Complete, Complete},
+    {SpecialOperator,   Complete, Complete, Complete, Complete, Complete, Complete, SpecialOperator}
 };
