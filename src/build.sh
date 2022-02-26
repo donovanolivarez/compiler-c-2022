@@ -1,4 +1,4 @@
 #!/bin/bash
 rm lexer
 clear
-gcc -o lexer lexer.c
+gcc lexer.c -o lexer 

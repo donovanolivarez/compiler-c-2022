@@ -11,6 +11,11 @@
 int isKeyword(char* token);
 int isOperator(char c);
 int isSpecialOperator(char c);
+int bufferIsEmpty();
+int checkForStringError(int, char);
+void savePreviousState();
+void resetState();
+char advance();
 
 
 enum State { 
@@ -23,7 +28,9 @@ enum State {
     StringConstant = 5,
     Operator = 6,
     SpecialOperator = 7,
-    Complete = 8
+    HexNumber = 8,
+    Complete = 9,
+    ScientificNotation = 10,
 };
 // constants for checking reserved words and boolean constants
 const char keywords[32][12] = {
@@ -38,22 +45,25 @@ const char *bValues[] = {
 
 const char quotation = '"';
 
-const char operators[20] = { '+', '-', '*', '/', '%', '<', '>', '=', '!', '&', '|', ';', ',', '.', '(', ')', '{', '}' };
+const char operators[20] = { '+', '-', '*', '/', '%',';', ',', '.', '(', ')', '{', '}' };
 
 const char specialOperators[10] = {'<', '=', '>', '!', '&', '|'};
 
-const char specialOperatorTokens[10][10] = {"<=", ">=", "==", "!=", "&&", "||" };
+const char specialOperatorTokens[6][10] = {"<=", ">=", "==", "!=", "&&", "||" };
+
+const char specialOpT_Ids[6][20] = {"T_LessEqual", "T_GreaterEqual", "T_EqualEqual", "T_NotEqual", "T_And", "T_Or"};
 
 // anything greater than 0 is an accepted state
 // first index is the current state bit
 // state table - defines out finite automata
-const enum State stateTable[8][8] = {
-    {Start,             Identifer, Identifer, IntConstant, IntConstant, StringConstant, Operator, SpecialOperator },
-    {Identifer,         Identifer, Identifer, Identifer, Identifer, Identifer, Complete, Complete },
-    {BoolConstant,      Identifer, Identifer, Identifer, Identifer, Identifer, Identifer , Identifer}, // unnecessary row, maybe can delete later
-    {IntConstant,       Complete, Complete, IntConstant, DoubleConstant, Complete, Complete, Complete},
-    {DoubleConstant,    Complete, Complete, Complete, DoubleConstant, Complete, Complete, Complete},
-    {StringConstant,    StringConstant, StringConstant, StringConstant, StringConstant, StringConstant, StringConstant, Complete},
+const enum State stateTable[10][10] = {
+    {Start,             Identifer, Identifer, IntConstant, IntConstant, StringConstant, Operator, SpecialOperator, HexNumber },
+    {Identifer,         Identifer, Identifer, Identifer, Identifer, Complete, Complete, Complete },
+    {BoolConstant,      Identifer, Identifer, Identifer, Identifer, Complete, Identifer , Identifer}, // unnecessary row, maybe can delete later
+    {IntConstant,       Complete, Complete, IntConstant, DoubleConstant, Complete, Complete, Complete, HexNumber},
+    {DoubleConstant,    Complete, Complete, DoubleConstant, DoubleConstant, Complete, DoubleConstant, Complete},
+    {StringConstant,    StringConstant, StringConstant, StringConstant, StringConstant, Complete, StringConstant, Complete},
     {Operator,          Complete, Complete, Complete, Complete, Complete, Complete, Complete},
-    {SpecialOperator,   Complete, Complete, Complete, Complete, Complete, Complete, SpecialOperator}
+    {SpecialOperator,   Complete, Complete, Complete, Complete, Complete, Complete, SpecialOperator},
+    {HexNumber,         Complete, Complete, HexNumber, HexNumber, Complete, Complete, Complete, HexNumber}
 };
