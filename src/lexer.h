@@ -31,6 +31,7 @@ enum State {
     HexNumber = 8,
     Complete = 9,
     ScientificNotation = 10,
+    Commment = 11
 };
 // constants for checking reserved words and boolean constants
 const char keywords[32][12] = {

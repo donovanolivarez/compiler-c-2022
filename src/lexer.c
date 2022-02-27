@@ -11,7 +11,7 @@
 FILE *file;
 char buffer[100] = "";
 char c;
-int lineNum = 1, colNum = 1, characterCount = 0;
+int lineNum = 1, colNum = 0, characterCount = 0;
 int startColumn = 1;
 int state = Start;
 int previousState = Start;
@@ -73,8 +73,25 @@ void printResultsByState(char* buffer, int lineNum, int startColumn, int colNum,
     }
     case IntConstant: 
     {
-        long val = strtol(buffer, NULL, 10);
-        printf("%-12s line %d cols %d-%d is %s (value = %-1ld)\n", buffer, lineNum, startColumn, colNum, stateType, val);
+        int val;
+        char c;
+        int isHex = 0;
+        int i = 0;
+        for (c = buffer[i]; c != '\0'; c = buffer[i]) {
+            if (isxdigit(c) || c == '0' || c == 'x' || c == 'X') {
+                isHex = 1;
+            } else {
+                isHex = 0;
+            }
+            i++;
+        }
+        if (isHex == 1) {
+            val = strtol(buffer, NULL, 16);
+            printf("%-12s line %d cols %d-%d is %s (value = %-1d)\n", buffer, lineNum, startColumn, colNum, stateType, val);
+        } else {
+            val = strtol(buffer, NULL, 10);
+            printf("%-12s line %d cols %d-%d is %s (value = %-1d)\n", buffer, lineNum, startColumn, colNum, stateType, val);
+        }
         break;
     }
     case DoubleConstant:
@@ -140,7 +157,7 @@ int checkForStringError(int state, char c) {
 void resetState() {
     state = Start;
     previousState = Start;
-    colNum = 0;
+    colNum = 1;
     stateType[0] = '\0';
     buffer[0] = '\0';
 }
@@ -225,6 +242,12 @@ int notIn(char c, char* str) {
 void endToken() {
     printResultsByState(buffer, lineNum, startColumn, colNum, stateType, state);
 }
+
+char fpeek(FILE * const fp)
+{
+  const int c = getc(fp);
+  return c == EOF ? EOF : ungetc(c, fp);
+}
 int main(int argc, const char * argv[]) {
     file = fopen(argv[1], "r");
     // initial read
@@ -232,13 +255,19 @@ int main(int argc, const char * argv[]) {
 
     while(c != EOF) {
 
-        while (c != '\n' && !isspace(c)) {
-            characterCount++;
+        if (isOperator(c) != 0 && isSpecialOperator(c) != 0 && !isalpha(c) && !isnumber(c) && c != '\n' && !isspace(c) && c != quotation) {
+            printf("\n\n***Error line %d\n***Unrecognized char '%c'\n", lineNum, c);
+            c =advance(file);
+            continue;
+        }
+
+        while (c != '\n' && !isspace(c) && c != EOF) {
             // handle strings
             if (c == '"') {
                 strcpy(stateType, "T_StringConstant");
                 strncat(buffer, &c, 1);
                 c = advance(file);
+                colNum++;
                 state = StringConstant;
                 // go through string elements
                 while(c != '\n' && c != '"') {
@@ -265,444 +294,304 @@ int main(int argc, const char * argv[]) {
                 characterCount++;
                 state = Identifer;
                 strcpy(stateType, "T_Identifier");
-                while (!isspace(c) && c != '\n' && c != '"' && isOperator(c) != 0) {
+                while ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z' || c == '_') || (c >= '0' && c <= '9') && isOperator(c) != 0) {
                     strncat(buffer, &c, 1);
                     c = advance(file);
-                    characterCount++;
+                    colNum++;
+                }
+
+                if (strlen(buffer) > 31) {
+                        printf("***Error line %d\n*** Identifier too long: \"%s\"\n", lineNum, buffer);
+                        c = advance(file);
                 }
                 if (isKeyword(buffer) == 0) {
-                    toupper(buffer[0]);
+                    char output[20] = "";
+                    strcpy(output, buffer);
+                    output[0] = toupper(output[0]);
+
                     strcpy(stateType, "T_");
-                    strncat(stateType, buffer, 15);
-                    tolower(buffer[0]);
+                    strncat(stateType, output, 15);
                 }
-                endToken();
-                buffer[0] = '\0';
+
+                if (isBooleanConstant(buffer) == 0) {
+                    state = BoolConstant;
+                    strcpy(stateType, "T_BoolConstant");
+                }
+                if (strlen(buffer) != 0) {
+                    endToken(); 
+                    state = Start;
+                    buffer[0] = '\0';
+                }
             }
 
             // handle numbers
-            if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == '.') {
-                characterCount++;
+            if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
                 state = IntConstant;
                 strcpy(stateType, "T_IntConstant");
-
-                 if (c == '.') {
-                     if (strlen(buffer) == 0) {
-                        strncat(buffer, &c, 1);
-                        c = advance(file);
-                        characterCount++;
-                        state = Operator;
-                     } else {
-                     c = advance(file);
-                     state = DoubleConstant;
-                     while ((c >= '0' && c <= '9')) {
-                        strncat(buffer, &c, 1);
-                        c = advance(file);
-                        characterCount++;
-                     }
-                     }
-                     endToken();
-                     state = IntConstant;
-                     buffer[0] = '\0';
-                     continue;
-                 }
 
                 int value = c - '0';
                 if (value > 0) {
                     while(c >= '0' && c <= '9') {
                         strncat(buffer, &c, 1);
                         c = advance(file);
-                        characterCount++;
+                        colNum++;
                     }
-                    // encountered a period , signifying a double
-                    if ((c == '.' || c == 'e' || c == 'E') ) {
-                        strncat(buffer, &c, 1);
-                        c = advance(file);
-                        state = DoubleConstant;
-                        strcpy(stateType, "T_DoubleConstant");
-                        while ((c >= '0' && c <= '9') || (c == 'e' || c == 'E') || (c == '+' || c == '-')) {
+                    if (strlen(buffer) > 0 && c == '\n' && isspace(c) && (c != '.' || c != 'e' || c!='E')) {
+                        endToken();
+                        buffer[0] = '\0';
+                        state = Start;
+                    } else {
+                        // handle doubles
+                        if (c == '.') {
+                            strcpy(stateType, "T_DoubleConstant");
+                            state = DoubleConstant;
                             strncat(buffer, &c, 1);
                             c = advance(file);
-                            characterCount++;
-                        }
+                            colNum++;
+
+                            while ((c >= '0' && c <= '9') || (c == 'e' || c == 'E') || (c == '+' || c == '-')) {
+
+                            if (c == 'e' || c == 'E') {
+                                int failCount = 1;
+                                char temp[5] = "";
+                                strncat(temp, &c, 1);
+                                if (fpeek(file) == '+' || fpeek(file) == '-' || (fpeek(file) >= '0' && fpeek(file) <= '9')) {
+                                    c = advance(file);
+                                    colNum++;
+                                    strncat(temp, &c, 1);
+                                    failCount++;
+                                    // valid exponent
+                                    if (fpeek(file) >= '0' && fpeek(file) <= '9') {
+                                        strncat(buffer, temp, 5);
+                                        // strncat(buffer, &c, 1);
+                                        c = advance(file);
+                                        colNum++;
+                                        while (c >= '0' && c <= '9') {
+                                            strncat(buffer, &c, 1);
+                                            c = advance(file);
+                                            colNum++;
+                                        }
+                                        break;
+                                    } else {
+                                        //invalid exponent
+                                        fseek(file, -failCount, SEEK_CUR);
+                                        c = advance(file);
+                                        colNum = colNum - failCount;
+                                        startColumn = colNum;
+                                        break;
+                                    }
+                                }
+                            }
+                                strncat(buffer, &c, 1);
+                                c = advance(file);
+                                colNum++;
+                            }
+                        } 
+                        endToken();
+                        buffer[0] = '\0';
+                        state = Start;
                     }
-                    endToken();
-                    state = Start;
-                    buffer[0] = '\0';
-                    
                 } else {
+                    // current char is 0.
+                    char temp[3] = "";
+                    int failCount = 1;
                     // handle hex values
-                    if (c == 'x' || c == 'X') {
-                        while ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-                            strncat(buffer, &c, 1);
+                    if (fpeek(file) == 'x' || fpeek(file) == 'X') {
+                        strncat(temp, &c, 1);
+                        c = advance(file);
+                        colNum++;
+                        strncat(temp, &c, 1);
+                        if ( !isxdigit(fpeek(file))) {
+                            fseek(file, -failCount, SEEK_CUR);
+                            endToken();
+                            buffer[0] = '\0';
+                            state = Start;
+                        } else {
+                            strcpy(buffer, temp);
                             c = advance(file);
-                            characterCount++;
+                            colNum++;
+                            while ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+                                printf("buffer: %s\n", buffer);
+                                strncat(buffer, &c, 1);
+                                c = advance(file);
+                                colNum++;
+                            }
                         }
                         endToken();
+                        buffer[0] = '\0';
+                        state = Start;
                         // non-hex, but begin with zero
                     } else {
                         while((c >= '0' && c <= '9')) {
                             strncat(buffer, &c, 1);
                             c = advance(file);
-                            characterCount++;
+                            colNum++;
                         }
+
+                        if (strlen(buffer) > 0 && c == '\n' && isspace(c) && (c != '.' || c != 'e' || c!='E')) {
+                            endToken();
+                            buffer[0] = '\0';
+                            state = Start;
+                        } else {
                         // encountered a period , signifying a double
-                        if (c == '.' || c == 'e' || c == 'E') {
+                        if (c == '.') {
+                            strcpy(stateType, "T_DoubleConstant");
+                            state = DoubleConstant;
                             strncat(buffer, &c, 1);
                             c = advance(file);
-                            state = DoubleConstant;
-                            strcpy(stateType, "T_DoubleConstant");
-                            while ((c >= '0' && c <= '9')) {
+
+                            while ((c >= '0' && c <= '9') || (c == 'e' || c == 'E') || (c == '+' || c == '-')) {
+
+                            if (c == 'e' || c == 'E') {
+                                int failCount = 1;
+                                char temp[5] = "";
+                                strncat(temp, &c, 1);
+                                if (fpeek(file) == '+' || fpeek(file) == '-' || (fpeek(file) >= '0' && fpeek(file) <= '9')) {
+                                    c = advance(file);
+                                    strncat(temp, &c, 1);
+                                    failCount++;
+                                    // valid exponent
+                                    if (fpeek(file) >= '0' && fpeek(file) <= '9') {
+                                        strncat(buffer, temp, 5);
+                                        // strncat(buffer, &c, 1);
+                                        c = advance(file);
+                                        while (c >= '0' && c <= '9') {
+                                            strncat(buffer, &c, 1);
+                                            c = advance(file);
+                                        }
+                                        break;
+                                    } else {
+                                        //in valid exponent
+                                        fseek(file, -failCount, SEEK_CUR);
+                                        c = advance(file);
+                                        colNum = colNum - failCount;
+                                        startColumn = colNum;
+                                        break;
+                                    }
+                                }
+                            }
                                 strncat(buffer, &c, 1);
                                 c = advance(file);
-                                characterCount++;
+                                colNum++;
                             }
+                        } 
+                            endToken();
+                            buffer[0] = '\0';
+                            state = Start;
                         }
-                        endToken();
-                        buffer[0] = '\0';
                     }
                 }
             }
             // handle operators
             if (isOperator(c) == 0 || isSpecialOperator(c) == 0) {
-
-                if (isOperator(c) == 0) {
-
-                } else if (isSpecialOperator(c) == 0) {
-
-                }
-
-                strncat(buffer, &c, 1);
-                c = advance(file);
                 state = Operator;
+                if (isOperator(c) == 0) {
+                    while(isOperator(c) == 0) {
+                        state = Operator;
+                        // comments
+                        if (c == '/') {
+                            char peek = fpeek(file);
+                            if (peek == '/') {
+                                // single line
+                                char line[100] = "";
+                                size_t len = 0;
+                                fgets (line, sizeof(line), file);
+                                lineNum++;
+                                c = advance(file);
+                                colNum =1;
+                                startColumn = colNum;
+                                continue;
+                            } else if (peek == '*') {
+                                /*
+                                multi-line
+                                */
+                                char line[100] = "";
+                                while(fgets(line, sizeof(line), file)) {
+                                    char temp;
+                                    int size = strlen(line);
+                                    lineNum++;
+                                    if (fpeek(file) == '*' || (line[size-3] == '*' && line[size-2] == '/')) {
+                                        break;
+                                    }
+                                }
+                                c = advance(file);
+                                colNum = 1;
+                                startColumn = colNum;
+                                continue;
+                            }
+                        } else if (c == '*') {
+                            char peek = fpeek(file);
+                            if (peek == '/') {
+                                c = advance(file);
+                                colNum++;
+                                break;
+                                // multiline comments stop
+                            }
+                        } else {
+                            strncat(buffer, &c, 1);
+                            characterCount++;  
+                        }
+                        if (strlen(buffer) > 0) {
+                            endToken();
+                            state = Start;
+                            buffer[0] = '\0';
+                        }
+                        c = advance(file);
+                    }
+                } else if (isSpecialOperator(c) == 0) {
+                    while(isSpecialOperator(c) == 0) {
+                        if (c == '=' || c == '!' || c == '<' || c == '>')  {
+                            state = Operator;
+                            char peek;
+                            char temp[3] = "";
+                            peek = fpeek(file);
+                            if (peek == '=') {
+                                strncat(buffer, &c, 1);
+                                c = advance(file);
+                                strncat(buffer, &c, 1);
+                                state = SpecialOperator;
+                                if (strcmp(buffer, "==") == 0) {
+                                    strcpy(stateType, "T_Equal");
+                                } else if (strcmp(buffer, "!=") == 0) {
+                                    strcpy(stateType, "T_NotEqual");
+                                } else if (strcmp(buffer, "<=") == 0) {
+                                    strcpy(stateType, "T_LessEqual");
+                                }  else if (strcmp(buffer, ">=") == 0) {
+                                    strcpy(stateType, "T_GreaterEqual");
+                                }
 
-                while ((c >= '0' && c <= '9') || (c == 'e' || c == 'E') || (c == '+' || c == '-')) {
-                    strncat(buffer, &c, 1);
-                    c = advance(file);
-                    characterCount++;
+                                endToken();
+                                buffer[0] = '\0';
+                            } else {
+                                state = Operator;
+                                strncat(buffer, &c, 1);
+                                endToken();
+                                buffer[0] = '\0';
+                            }
+                        } else if (c == '|' || c == '&') {
+
+                        }
+                        c = advance(file);
+                        characterCount++;   
+                    }
                 }
-                endToken();
-                buffer[0] = '\0';
+                if (strlen(buffer) > 0) {
+                    endToken();
+                    state = Start;
+                    buffer[0] = '\0';
+                }
             }
+            startColumn = colNum;
         }
+
         if (c == '\n') {
             lineNum++;
         }
-
+        state = Start;
         buffer[0] = '\0';
         characterCount++;
         c = advance(file);
-
-
-        // printf("\n******CURRENT CHAR*****: %c\n", c);
-        // printf("Line Number: %d\n", lineNum);
-        // if (c == '\n' && strlen(buffer) == 0) {
-        //     characterCount++;
-        //     lineNum++;
-        //     c = fgetc(file);
-        //     continue;
-        // }
-
-        // if (newlineOrSpaceEncountered(c) == 0) {
-        //     colNum = 1;
-        // }
-
-        // if (c == '\n' || isspace(c)) {
-
-        //     // if (state == StringConstant && c == '\n') {
-        //     //     printf("***Error line %d\n***Unterminated String Constant: %s\n", lineNum, buffer);
-        //     //     c = fgetc(file);
-        //     //     characterCount++;
-        //     //     resetState();
-        //     //     continue;
-        //     // } else if (state == StringConstant && isspace(c)) {
-        //     //     strncat(buffer, &c, 1);
-        //     //     c = fgetc(file);
-        //     //     characterCount++;
-        //     //     continue;
-        //     // }
-
-        //     if (strlen(buffer) != 0 && state != StringConstant) {
-
-        //         if (isKeyword(buffer) == 0) {
-        //             strncpy(stateType, "T_", 3);
-        //             buffer[0] = toupper(buffer[0]);
-        //             strncat(stateType, buffer, 15);
-        //             state = Complete;
-        //         }
-
-        //         if (state == SpecialOperator && (strlen(buffer) == 1)) {
-        //             // print as single operator.
-        //             previousState = Operator;
-        //             state = stateTable[state][Operator];
-        //         } else if (state == SpecialOperator) {
-        //             // print ambiguous operator with type instead of value.
-        //             int index = getSpecialOpIndex(buffer);
-        //             stateType[0] = '\0';
-        //             strncpy(stateType, specialOpT_Ids[index], 15);
-        //             state = stateTable[state][Operator];
-        //         }
-
-        //         // check if boolean constant. Maybe place in it's own function for organization.
-        //         if (isBooleanConstant(buffer) == 0) {
-
-        //         }
-
-        //         state = Complete;
-
-        //         if (state == Complete) {
-        //             printResultsByState(buffer, lineNum, startColumn, colNum, stateType, previousState);
-        //             resetState();
-        //             c = fgetc(file);
-        //             characterCount++;
-        //             continue;
-        //         }
-        //     } else {
-        //         colNum++;
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-        // }
-
-        // // if ((isxdigit(c) != 0) && (state == HexNumber)) {
-        // //     if (stateTable[previousState][Identifer] != Complete) {
-        // //         previousState = state;
-        // //     }
-        // //     state = stateTable[state][HexNumber];
-        // //     strncat(buffer, &c, 1);
-        // //     characterCount++;
-        // //     c = fgetc(file);
-        // //     continue;
-        // // }
-        // // if char is identifier (special or not special does not matter at this point)
-        // if (isalpha(c) || (c == '_')) {
-
-        //     if (state == HexNumber) {
-
-        //     }
-        //     // handle exponential
-        //     if (state == DoubleConstant && isValidExponentialSymbol(c) == 0) {
-        //         while(c != '\n' && !isspace(c) && notIn(c, buffer) == 0 && (c == validExponentSigns[0] || c == validExponentSigns[1]) && (c >= '0' && c <= '9')) {
-        //             strncat(buffer, &c, 1);
-        //             c = advance(file);
-        //             characterCount++;
-        //         }
-        //     }
-
-        //     if (isScientificNotation(c, state) == 0) {
-        //         state = stateTable[state][DoubleConstant];
-        //         strncat(buffer, &c, 1);
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-
-        //     if (isHexadecimalForm(c,buffer) == 0) {
-        //         state = stateTable[state][HexNumber];
-        //         strncat(buffer, &c, 1);
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-        //     savePreviousState(Identifer);
-        //     state = stateTable[state][Identifer];
-
-        //     if (state == Identifer) {
-
-        //         savePreviousState(Identifer);
-        //         state = stateTable[state][Identifer];
-        //         strncpy(stateType, "T_Identifier", 13);
-        //         strncat(buffer, &c, 1);
-        //         colNum++;
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-        //     if (state == StringConstant) {
-        //         state = stateTable[state][Identifer];
-        //         strncat(buffer, &c, 1);
-        //         colNum++;
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-
-        //     if (state == Complete) {
-        //         if (previousState != StringConstant) {
-        //             fseek(file, characterCount--, SEEK_SET);
-        //         }
-        //         printResultsByState(buffer, lineNum, startColumn, colNum, stateType, previousState);
-        //         resetState();
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     } 
-        // }
-
-        // // handle numbers 
-        // if (isnumber(c)) {
-        //     savePreviousState(IntConstant);
-        //     state = stateTable[state][IntConstant];
-        //     if (state == IntConstant) {
-        //         savePreviousState(IntConstant);
-        //         strncat(buffer, &c, 1);
-        //     } else if (state == DoubleConstant) {
-        //         while(c != '\n' && !isspace(c) && (c >= '0' && c <= '9') && (c != 'E' || c != 'e')) {
-        //             printf("Hello!");
-        //             printf("\nCurrent char: %c\n", c);
-        //             strncat(buffer, &c, 1);
-        //             c = advance(file);
-        //             characterCount++;
-        //             printf("buffer: %s\n", buffer);
-        //             continue;
-        //         }
-        //         savePreviousState(DoubleConstant);
-        //     } else if (state == StringConstant) {
-        //         savePreviousState(StringConstant);
-        //         strncat(buffer, &c, 1);
-        //     } else if (state == Identifer) {
-        //         savePreviousState(Identifer);
-        //         strncat(buffer, &c, 1);
-        //     }
-            // colNum++;
-            // characterCount++;
-            // c = advance(file);
-            // continue;
-            // savePreviousState(IntConstant);
-            // if (state == DoubleConstant) {
-            //     state = stateTable[state][DoubleConstant];
-            //     characterCount++;
-            // } else {
-            //     state = stateTable[state][IntConstant];
-            //     characterCount++;
-            // }
-
-            
-            
-            // if (strlen(buffer) == 0 ) {
-            //     strncpy(stateType, "T_IntConstant", 13);
-            // }
-        //     if (state == Complete) {
-        //         fseek(file, characterCount--, SEEK_SET);
-        //         // output previous token, backspace operation occurs before this.
-        //         printResultsByState(buffer, lineNum, startColumn, colNum, stateType, previousState);
-        //         resetState();
-        //         c = fgetc(file);
-        //         characterCount++;
-        //         continue;
-        //     } else {
-        //         previousState = state;
-        //         colNum++;
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-        // }
-
-        // handle operators and punctuation
-        // if (ispunct(c) && (c != '_')) {
-        //     if (state == DoubleConstant) {
-        //     }
-        //     if (state == SpecialOperator) {
-        //         char tempVal[8] = "";
-        //         strcpy(tempVal, buffer);
-        //         strncat(tempVal, &c, 1);
-        //         if (isSpecialOperatorToken(tempVal) == 0) {
-        //             savePreviousState(SpecialOperator);
-        //             state = stateTable[state][SpecialOperator];
-        //         } else {
-        //             savePreviousState(SpecialOperator);
-        //             state = stateTable[state][Operator];
-        //         }
-        //     } else {
-        //         if (isSpecialOperator(c) == 0) {
-        //             savePreviousState(SpecialOperator);
-        //             state = stateTable[state][SpecialOperator];
-        //         } else if (isDoubleForm(c, previousState) == 0) {
-        //             state = stateTable[state][DoubleConstant];
-        //             stateType[0] = '\0';
-        //             strncpy(stateType, "T_DoubleConstant", 13);
-        //             printf("DOUBLE HERE\n");
-        //         } else if (isOperator(c) == 0) {
-        //             savePreviousState(Operator);
-        //             state = stateTable[state][Operator];
-        //         } else if (c == quotation) {
-        //             // this is the start of a string, which will get recognized as punctuation at first.
-        //             if (state == Start || state == StringConstant) {
-        //                 savePreviousState(StringConstant);
-        //                 state = stateTable[state][StringConstant];
-        //             } else if (state != StringConstant && state != Start) {
-        //                 // output what is currently in buffer, then report the error.
-        //                 printResultsByState(buffer, lineNum, startColumn, colNum, stateType, previousState);
-        //                 printf("***Error line %d\n***Unterminated String Constant: %c\n", lineNum, c);
-        //                 c = fgetc(file);
-        //                 characterCount++;
-        //                 resetState();
-        //                 continue;
-        //             }
-        //             if (state == Complete) {
-        //                 strncat(buffer, &c, 1);
-        //             }
-        //         } else if(state != StringConstant){
-        //             printf("Error line %d\n*** Unrecognized char: '%c'\n",lineNum, c );
-        //             c = fgetc(file);
-        //             characterCount++;
-        //             resetState();
-        //             continue;
-        //         }
-
-
-        //     // if (isOperator(c) == 0) {
-        //     //     if (isSpecialOperator(c) == 0) {
-        //     //         if (isSpecialOperatorToken(buffer) != 0) {
-        //     //             strncpy(stateType, "T_", 3);
-        //     //             buffer[0] = toupper(buffer[0]);
-        //     //             strncat(stateType, buffer, 15);
-        //     //             state = stateTable[state][SpecialOperator];
-        //     //         } else {
-        //     //             savePreviousState(SpecialOperator);
-        //     //             state = stateTable[state][SpecialOperator];
-        //     //         }
-        //     //     }
-        //     // }
-
-        //     // if (c == quotation) {
-        //     //     // we have the beginning or the end of a string if we enter this block.
-        //     //     if (stateTable[previousState][StringConstant] != Complete) {
-        //     //         previousState = state;
-        //     //     }
-
-        //     //     if (strlen(buffer) == 0 ) {
-        //     //         strncpy(stateType, "T_StringConstant", 15);
-        //     //     }
-        //     //     state = stateTable[state][StringConstant];
-
-        //     //     if (strlen(buffer) > 0 && previousState == StringConstant) {
-        //     //         colNum++;
-        //     //         strncat(buffer, &c, 1);
-        //     //     }
-        //     // }
-        //     }
-
-        //     if (state == Complete) {
-        //         if (previousState != StringConstant) {
-        //             fseek(file, characterCount--, SEEK_SET);
-        //         }
-        //         printResultsByState(buffer, lineNum, startColumn, colNum, stateType, previousState);
-        //         resetState();
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     } else {
-        //         previousState = state;
-        //         colNum++;
-        //         strncat(buffer, &c, 1);
-        //         characterCount++;
-        //         c = fgetc(file);
-        //         continue;
-        //     }
-        // }
+        colNum = 1;
     }
     return 0;
 }
