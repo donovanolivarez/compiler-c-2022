@@ -6,6 +6,7 @@
 #define arraySize(x) ( sizeof(x) / sizeof((x)[0]) );
 
 // can either define or use Enum. Enum may be cleaner.
+// some definitions in this file are not in use. Needs cleaning.
 #define START_STATE = 0;
 
 int isKeyword(char* token);
