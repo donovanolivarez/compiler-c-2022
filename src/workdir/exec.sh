@@ -1,7 +1,7 @@
 #!/bin/bash
 
-FRAG_FILES="../samples/*.frag"
-DECAF_FILES="../samples/*.decaf"
+FRAG_FILES="./samples/*.frag"
+DECAF_FILES="./samples/*.decaf"
 
 if [ -z "$1" ] 
     then
@@ -22,6 +22,3 @@ else
     ./lexer $1 ;
     echo 
 fi
-# get list of files from ../samples directory
-# loop through list, run every file with the program.
-# BUT may need to ask about the requirements on the execution...
