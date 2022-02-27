@@ -1,4 +1,12 @@
 #!/bin/bash
-rm lexer
-clear
-gcc lexer.c -o lexer 
+name=${PWD##*/}
+
+if [ $name == workdir ]
+then
+    gcc ../lexer.c -o ../lexer
+fi
+
+if [ $name == src ]
+then
+    gcc ./lexer.c -o lexer
+fi
