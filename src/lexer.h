@@ -43,6 +43,9 @@ const char *bValues[] = {
     "true", "false"
 };
 
+const char validExponentialSymbols[6] = {'e', 'E'}; 
+const char validExponentSigns[2] = {'+', '-'};
+
 const char quotation = '"';
 
 const char operators[20] = { '+', '-', '*', '/', '%',';', ',', '.', '(', ')', '{', '}' };
