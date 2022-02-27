@@ -255,7 +255,7 @@ int main(int argc, const char * argv[]) {
 
     while(c != EOF) {
 
-        if (isOperator(c) != 0 && isSpecialOperator(c) != 0 && !isalpha(c) && !isnumber(c) && c != '\n' && !isspace(c) && c != quotation) {
+        if (isOperator(c) != 0 && isSpecialOperator(c) != 0 && !isalpha(c) && !isdigit(c) && c != '\n' && !isspace(c) && c != quotation) {
             printf("\n\n***Error line %d\n***Unrecognized char '%c'\n", lineNum, c);
             c =advance(file);
             continue;
