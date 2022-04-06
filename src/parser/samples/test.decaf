@@ -1,0 +1,5 @@
+void main() {
+    d = 2 + 3 * 4;
+}
+// belongs in functions.decaf
+Print(tester(c));

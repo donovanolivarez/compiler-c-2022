@@ -1,0 +1,22 @@
+int a;
+void main() {
+  int a;
+  int c;
+
+  a = 3;
+
+  c = a + b;
+}
+
+int tester(int d, int b) {
+  return (a + d);
+}
+
+void main() {
+  int a;
+  int c;
+
+  a = 3;
+
+  c = a + b;
+}
