@@ -27,7 +27,7 @@ public class Scanner {
         keywords.put("if",     T_If);
         keywords.put("void",    T_Void);
         keywords.put("or",     T_Or);
-        keywords.put("print",  PRINT);
+        keywords.put("Print",  PRINT);
         keywords.put("return", T_Return);
         keywords.put("super",  SUPER);
         keywords.put("this",   THIS);
@@ -39,6 +39,7 @@ public class Scanner {
         keywords.put("double", T_Double);
         keywords.put("break", T_Break);
         keywords.put("bool", T_Bool);
+        keywords.put("ReadInteger", ReadInteger);
     }
 
     Scanner(String source) {
@@ -68,6 +69,7 @@ public class Scanner {
             case '+': addToken(PLUS); break;
             case ';': addToken(SEMICOLON); break;
             case '*': addToken(STAR); break;
+            case '%': addToken(MOD); break;
             case '!':
                 addToken(match('=') ? T_NotEqual : BANG);
                 break;
@@ -86,6 +88,18 @@ public class Scanner {
                     while (peek() != '\n' && !isAtEnd()) advance();
                 } else {
                     addToken(SLASH);
+                }
+                break;
+            case '|':
+                if (match('|')) {
+                    addToken(T_Or);
+                }
+                break;
+            case '&':
+                if (match('&')) {
+                    addToken(AND);
+                } else {
+                    Decaf.error(line, "Unexpected character." + c);
                 }
                 break;
             case ' ':

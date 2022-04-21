@@ -40,7 +40,7 @@ public class Parser {
             currentToken = advance();
             prog.declarations.add(decl(currentToken));
         }
-        prog.toString();
+            prog.toString();
             return prog;
     }
 
@@ -52,6 +52,7 @@ public class Parser {
 
         if ((t.type == T_Void || t.type == T_Int || t.type == T_String || t.type == T_Double) && peekBy(1).type == LEFT_PAREN) {
             Decl.FuncDecl funcDecl = new Decl.FuncDecl();
+//            Decl funcDecl = new Decl.FuncDecl();
              funcDecl.type = t.type;
             // consume the identifier, which is the functions name
             if (peek().type == T_Identifier) {
@@ -69,10 +70,11 @@ public class Parser {
         if ((t.type == T_Int || t.type == T_Double || t.type == T_String || t.type == T_Bool) && peekBy(1).type == SEMICOLON){
             Decl.VarDecl varDecl;
             Token right = advance();
+            // consume the semi colon
             if (peek().type == SEMICOLON) advance();
             varDecl = new Decl.VarDecl();
             varDecl.definition = def(t, right);
-//            decl.definitions.addAll(decl(t).getDefinitions())
+
             return varDecl;
         }
         return decl;
@@ -89,57 +91,165 @@ public class Parser {
                     token = advance();
                 }
                 block.statements.add(stmt(token));
-//                if (token.type == SEMICOLON) token = advance();
                 token = previous();
                 if (token.type == SEMICOLON) token = advance();
             }
             return block;
         }
+        System.out.println("Syntax Error: Statement Block");
         return null;
     }
 
     private Statement stmt(Token token) {
         if (token.type == T_Return) {
+            return handleReturn(token);
             // consume the return keyword
-            token = advance();
-            ReturnStatement statement = new ReturnStatement();
-            statement.expression = expression(token);
-            token = previous();
-            if (token.type == SEMICOLON) advance();
-            return statement;
+//            token = advance();
+//            ReturnStatement statement = new ReturnStatement();
+//            statement.expression = expression(token);
+//            token = previous();
+//            if (token.type == SEMICOLON) advance();
+//            return statement;
         } else if (token.type == T_For) {
             ForStatement statement = new ForStatement();
+            statement.type = FOR;
+            // consume the for keyword, we know we have it.
             token = advance();
-            if (peek().type == LEFT_PAREN) token = advance();
+            // if checking for paren, if we don't have this we raise an error.
+            if (token.type == LEFT_PAREN) {
+                token = advance();
+            } else {
+                // potential error solution, extract to different function!
+                // only diff here is the token, which we can pass easily.
+                String errorLine = "Syntax Error: " + token.lexeme;
+                // get starting index of our error token
+                int startIndex = errorLine.indexOf(token.lexeme);
+                System.out.println("Syntax Error: \t\t" + token.lexeme);
+                StringBuilder errorTicks = new StringBuilder();
+                for (int i = 0; i < errorLine.chars().count(); i++) {
+                    System.out.println(i);
+                    if (i != startIndex) {
+                        errorTicks.append(" ");
+                    } else {
+                        errorTicks.append("^");
+                    }
+                }
+                System.out.println(errorLine);
+                System.out.println(errorTicks);
+            }
             // before and after are optional
-            statement.before = expression(token);
+            // this is gross
+            if (token.type == SEMICOLON) {
+                statement.before = null;
+                token = advance();
+            } else {
+                statement.before = expression(token);
+                token = previous();
+            }
+            // not optional
             statement.condition = expression(token);
-            statement.after = expression(token);
-            statement.statement = stmt(token);
+            token = previous();
 
+            if (token.type == SEMICOLON) token = advance();
+
+            if (token.type == SEMICOLON) {
+                statement.after = null;
+                token = advance();
+            } else {
+                statement.after = expression(token);
+                token = previous();
+            }
+
+            statement.statement = stmt(token);
+            token = previous();
             // should see right paren
-            if (peek().type == RIGHT_PAREN) token = advance();
+            if (token.type == RIGHT_PAREN) token = advance();
             // recurse since for statement has a statement inside of it
             statement.statement = stmt(token);
             return statement;
         } else if (token.type == T_Break) {
             BreakStatement statement = new BreakStatement();
-            // todo: set this on instantiation
             statement.type = T_Break;
             if (peek().type == SEMICOLON) advance();
             return statement;
         } else if (token.type == T_While) {
             WhileStatement statement = new WhileStatement();
             token = advance();
+            if (token.type == LEFT_PAREN) token = advance();
             statement.expression = expression(token);
+            token = previous();
             if (token.type == RIGHT_PAREN) advance();
             statement.statement = stmt(previous());
             return statement;
-        } else {
-            Statement statement = new Statement();
-            statement.expr = assignment(token);
+        } else if (token.type == T_If) {
+            IfStatement statement = new IfStatement();
+            token = advance();
+
+            if (token.type == LEFT_PAREN) token = advance();
+            statement.ifExpression = expression(token);
+            token = previous();
+
+            if (token.type == RIGHT_PAREN) token = advance();
+            statement.statement = stmt(token);
+
+            token = previous();
+            // check if this is a statement block, which will guide how we parse
+            if (!((Statement) statement instanceof StatementBlock)) {
+                if (token.type == SEMICOLON) token = advance();
+                if (token.type == RIGHT_BRACE) token = advance();
+            }
+
+            if (token.type == T_Else) {
+                if (peek().type == LEFT_BRACE) {
+                    token = advance();
+                    statement.elseExpression = expression(token);
+                    token = previous();
+                    if (token.type == SEMICOLON) token = advance();
+                    if (token.type == RIGHT_BRACE) token = advance();
+                } else {
+                    token = advance();
+                    statement.elseExpression = expression(token);
+                    token = previous();
+                }
+
+                statement.elseExpression = expression(token);
+                token = previous();
+            }
+            if (token.type == RIGHT_PAREN) advance();
             return statement;
+            // this condition represents a statement block
+        } else if (token.type == LEFT_BRACE) {
+            // we have a statement block
+            StatementBlock statementBlock = new StatementBlock();
+            statementBlock = block(token);
+            return statementBlock;
+        } else if (token.type == PRINT) {
+            token = advance();
+            PrintStatement statement = new PrintStatement();
+            while (token.type != RIGHT_PAREN) {
+                if (token.type == LEFT_PAREN)
+                    token = advance();
+                else
+                    token = advance();
+                statement.expressions.add(expression(token));
+                token = previous();
+            }
+            advance();
+            return statement;
+        } else {
+            ExpressionStatement expressionStatement = new ExpressionStatement();
+            expressionStatement.expr = assignment(token);
+            return expressionStatement;
         }
+    }
+
+    private ReturnStatement handleReturn(Token token) {
+        token = advance();
+        ReturnStatement statement = new ReturnStatement();
+        statement.expression = expression(token);
+        token = previous();
+        if (token.type == SEMICOLON) advance();
+        return statement;
     }
 
     private Formal formal(Token token) {
@@ -186,10 +296,25 @@ public class Parser {
                 Token val = (Token) ((Expr.Literal)expr).getValue();
                 return new Expr.Assignment( val, operator, assignmentValue);
             }
-        } else if (token.type == T_Identifier && peek().type == LEFT_PAREN) {
+        } else if (token.type == LEFT_PAREN) {
+            System.out.println("Do call");
+            Token val = (Token) ((Expr.Literal)expr).getValue();
+            Expr.Call call = new Expr.Call(val);
+            token = advance();
+            while(token.type != RIGHT_PAREN) {
+                call.addActual(assignment(token));
+                if (previous().type == COMMA) {
+                    token = advance();
+                } else {
+                    token = previous();
+                }
+            }
+            advance();
+            expr = call;
             // call
-        } else if (token.type == T_Identifier) {
+        } else if (token.type == ReadInteger) {
             // just LValue
+            // NOTE: I think this is already handled in the recursive call...
         }
         return expr;
     }
@@ -215,6 +340,7 @@ public class Parser {
             Token operator = previous();
             Expr right = logicalOr(advance());
             expr = new Expr.Binary(expr, operator, right);
+            token = previous();
         }
         return expr;
     }
@@ -223,10 +349,11 @@ public class Parser {
         Expr expr = relational(token);
         token = previous();
         while (token.type == T_NotEqual || token.type == T_Equal) {
-            advance();
+//            advance();
             Token operator = previous();
             Expr right = relational(advance());
             expr = new Expr.Binary(expr, operator, right);
+            token = previous();
         }
         return expr;
     }
@@ -236,10 +363,11 @@ public class Parser {
         Expr expr = term(token);
         token = previous();
         while (token.type == T_GreaterEqual || token.type == T_LessEqual || token.type == LESS || token.type == GREATER) {
-            advance();
+//            advance();
             Token op = previous();
             Expr right = term(advance());
             expr = new Expr.Binary(expr, op, right);
+            token = previous();
         }
         return expr;
     }
@@ -261,7 +389,7 @@ public class Parser {
         // unary is single operator minus and logical not
         Expr expr = unary(token);
         token = previous();
-        while (token.type == STAR || token.type == SLASH) {
+        while (token.type == STAR || token.type == SLASH || token.type == MOD) {
             Token op = previous();
             Expr right = term(advance());
             expr = new Expr.Binary(expr, op, right);
@@ -272,10 +400,11 @@ public class Parser {
 
     private Expr unary(Token token) {
         token = previous();
-        if (match(BANG, MINUS)) {
+        if (token.type == BANG || token.type == MINUS) {
             Token operator = previous();
-            Expr right = unary(token);
-            return new Expr.Unary(operator, right);
+            Expr right = unary(advance());
+            Expr expr = new Expr.Unary(operator, right);
+            return expr;
         }
 
         // at this point, must be constant value
@@ -284,11 +413,16 @@ public class Parser {
 
     private Expr literal(Token token) {
         token = previous();
-        if (token.type == T_Identifier) {
+        if (token.type == T_Identifier || token.type == ReadInteger) {
             advance();
             return new Expr.Literal(token);
         }
         if (token.type == T_IntConstant || token.type == T_DoubleConstant) {
+            advance();
+            return new Expr.Literal(token);
+        }
+
+        if (token.type == T_BoolConstant || token.type == STRING) {
             advance();
             return new Expr.Literal(token);
         }
@@ -305,86 +439,6 @@ public class Parser {
         }
         return null;
     }
-
-//
-//    private Expr expression() {
-//        return equality();
-//    }
-//
-//    private Expr equality() {
-//        Expr expr = comparison();
-//
-//        while(match(T_NotEqual, T_Equal)) {
-//            Token operator = previous();
-//            Expr right = comparison();
-//            expr = new Expr.Binary(expr, operator, right);
-//        }
-//        return expr;
-//    }
-//
-//    private Expr comparison() {
-//        Expr expr = term();
-//
-//        while (match(GREATER, T_GreaterEqual, LESS, T_LessEqual)) {
-//            Token operator = previous();
-//            Expr right = term();
-//            expr = new Expr.Binary(expr, operator, right);
-//        }
-//
-//        return expr;
-//    }
-//
-//    private Expr term() {
-//        Expr expr = factor();
-//
-//        // if match is true, then we advance to the next token.
-//        while (match(MINUS, PLUS)) {
-//            Token operator = previous();
-//            Expr right = factor();
-//            expr = new Expr.Binary(expr, operator, right);
-//        }
-//
-//        return expr;
-//    }
-//
-//    private Expr factor() {
-//        Expr expr = unary();
-//
-//        while (match(SLASH, STAR)) {
-//            Token operator = previous();
-//            Expr right = unary();
-//            expr = new Expr.Binary(expr, operator, right);
-//        }
-//
-//        return expr;
-//    }
-//
-//    private Expr unary() {
-//        if (match(BANG, MINUS)) {
-//            Token operator = previous();
-//            Expr right = unary();
-//            return new Expr.Unary(operator, right);
-//        }
-//
-//        return primary();
-//    }
-//
-//    private Expr primary() {
-//        if (match(T_BoolConstant)) return new Expr.Literal(false);
-//        if (match(TRUE)) return new Expr.Literal(true);
-//        if (match(NIL)) return new Expr.Literal(null);
-//
-//        if (match(T_IntConstant, STRING)) {
-//            return new Expr.Literal(previous().literal);
-//        }
-//
-//        if (match(LEFT_PAREN)) {
-//            Expr expr = expression();
-//            consume(RIGHT_PAREN, "Expect ')' after expression.");
-//            return new Expr.Grouping(expr);
-//        }
-//    }
-
 
     private boolean match(TokenType... types) {
         for (TokenType type : types) {

@@ -1,5 +1,5 @@
 void main() {
-    d = 2 + 3 * 4;
+d = 2 + 2
+    someCall(2 + 4 / 3, 6 * 8)
+    anotherCall()
 }
-// belongs in functions.decaf
-Print(tester(c));
